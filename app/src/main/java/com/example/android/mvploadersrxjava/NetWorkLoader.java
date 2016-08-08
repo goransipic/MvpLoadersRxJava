@@ -16,33 +16,35 @@ import rx.schedulers.Schedulers;
 /**
  * Created by User on 6.8.2016..
  */
-public class NetWorkLoader extends Loader<NetWorkLoader.Result> {
+public class NetWorkLoader extends Loader<NetWorkLoader.OperationWrapper> {
 
-    Retrofit retrofit = new Retrofit.Builder()
+    private Result mResult = new Result();
+
+    private Operation mOperation = new Operation();
+
+    private GitHubService service;
+
+    private Retrofit mRetrofit = new Retrofit.Builder()
             .baseUrl("https://api.github.com/")
             .addCallAdapterFactory(RxJavaCallAdapterFactory.create())
             .addConverterFactory(GsonConverterFactory.create())
             .build();
 
-    GitHubService service;
-
-    GetPostResults result = new GetPostResults(null);
-
     public NetWorkLoader(Context context) {
         super(context);
 
-        service = retrofit.create(GitHubService.class);
+        service = mRetrofit.create(GitHubService.class);
     }
 
-    public GetPostResults getResult() {
-        return this.result;
+    public Result getResult() {
+        return mResult;
     }
 
     @Override
     protected void onStartLoading() {
 
         if (takeContentChanged()) {
-            deliverResult(result);
+            deliverResult(mOperation,Operation.REFRESH_UI);
         }
     }
 
@@ -50,15 +52,8 @@ public class NetWorkLoader extends Loader<NetWorkLoader.Result> {
 
         service.listRepos("shrenk")
                 .subscribeOn(Schedulers.newThread())
-                .map(new Func1<List<Repo>, Result>() {
-                    @Override
-                    public Result call(List<Repo> repos) {
-                        result.setRepos(repos);
-                        return result;
-                    }
-                })
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(new Subscriber<Result>() {
+                .subscribe(new Subscriber<List<Repo>>() {
                     @Override
                     public void onCompleted() {
 
@@ -66,23 +61,29 @@ public class NetWorkLoader extends Loader<NetWorkLoader.Result> {
 
                     @Override
                     public void onError(Throwable e) {
-
+                        deliverResult(e, Operation.ERROR);
                     }
 
                     @Override
-                    public void onNext(Result repos) {
-                        deliverResult(result);
+                    public void onNext(List<Repo> repos) {
+                        deliverResult(repos, Operation.LOAD_COMPLETE);
                     }
                 });
-
-
     }
 
+    public void deliverResult(Object result, int operation) {
 
-    @Override
-    public void deliverResult(Result data) {
-        if (isStarted()) {
-            super.deliverResult(data);
+        if (operation == Operation.LOAD_COMPLETE) {
+            mResult.setRepos((List<Repo>) result);
+            mOperation.setLoadComplete(true);
+        }
+
+        if (operation == Operation.ERROR) {
+            mOperation.setError(true);
+        }
+
+        if (isStarted() || (operation == Operation.REFRESH_UI)) {
+            super.deliverResult(new OperationWrapper(mOperation));
         } else {
             onContentChanged();
         }
@@ -90,27 +91,59 @@ public class NetWorkLoader extends Loader<NetWorkLoader.Result> {
 
     }
 
-    public static interface Result {
+    public static class OperationWrapper {
 
+        protected Operation mOperation;
+
+        public OperationWrapper(Operation mOperation) {
+            this.mOperation = mOperation;
+        }
+
+        public Operation getOperation() {
+            return mOperation;
+        }
     }
 
-    public static class GetPostResults implements Result {
+    public static class Operation {
 
-        public GetPostResults(List<Repo> repos) {
-            this.repos = repos;
+        boolean mLoadComplete;
+        boolean mError;
+
+        public static final int LOAD_COMPLETE = 1;
+        public static final int ERROR = 2;
+        private static final int REFRESH_UI = 3;
+
+        public boolean executeLoadComplete() {
+            boolean loadComplete = mLoadComplete;
+            mLoadComplete = false;
+            return loadComplete;
         }
+
+        public boolean setLoadComplete(boolean mLoadComplete) {
+            return this.mLoadComplete = mLoadComplete;
+        }
+
+        public boolean executeHasError() {
+            boolean error = mError;
+            mError = false;
+            return error;
+        }
+
+        public void setError(boolean mError) {
+            this.mError = mError;
+        }
+    }
+
+    public class Result {
+
+        private List<Repo> mRepos;
 
         public List<Repo> getRepos() {
-            return repos;
+            return mRepos;
         }
 
-        public void setRepos(List<Repo> repos) {
-            this.repos = repos;
+        public void setRepos(List<Repo> mRepos) {
+            this.mRepos = mRepos;
         }
-
-        List<Repo> repos;
-
     }
-
-
 }

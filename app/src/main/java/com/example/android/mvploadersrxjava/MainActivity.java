@@ -13,7 +13,7 @@ import java.util.List;
 
 import rx.Observable;
 
-public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<NetWorkLoader.Result> {
+public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<NetWorkLoader.OperationWrapper> {
 
     private Loader<String> stringLoader;
     private NetWorkLoader mNetWorkLoader;
@@ -36,6 +36,10 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         });
         if (savedInstanceState != null) {
             mNetWorkLoader = (NetWorkLoader) getSupportLoaderManager().initLoader(0, null, this);
+            if (mNetWorkLoader.getResult().getRepos() != null){
+                // Restore Data after Configuration change
+                mTextView.setText(mNetWorkLoader.getResult().getRepos().toString());
+            }
 
         } else {
             getSupportLoaderManager().initLoader(0, null, this);
@@ -44,36 +48,33 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
     }
 
     @Override
-    public Loader<NetWorkLoader.Result> onCreateLoader(int id, Bundle args) {
+    public Loader<NetWorkLoader.OperationWrapper> onCreateLoader(int id, Bundle args) {
         mNetWorkLoader = new NetWorkLoader(this);
         return mNetWorkLoader;
     }
 
     @Override
-    public void onLoadFinished(Loader<NetWorkLoader.Result> loader, NetWorkLoader.Result data) {
+    public void onLoadFinished(Loader<NetWorkLoader.OperationWrapper> loader, NetWorkLoader.OperationWrapper operationResult) {
 
-        if (data instanceof NetWorkLoader.GetPostResults){
-            List<Repo> repos = (List<Repo>) ((NetWorkLoader.GetPostResults) data).getRepos();
+        NetWorkLoader.Operation operation = operationResult.getOperation();
 
-            for (Repo repo : repos){
+        if (operation.executeLoadComplete()){
+            mTextView.setText("");
+            List<Repo> repos = mNetWorkLoader.getResult().getRepos();
+
+            for (Repo repo : repos) {
                 mTextView.setText(repo.getName() + "\n" + mTextView.getText());
             }
         }
 
-
+        if (operation.executeHasError()) {
+            mTextView.setText("Has Error");
+        }
     }
 
     @Override
-    public void onLoaderReset(Loader<NetWorkLoader.Result> loader) {
+    public void onLoaderReset(Loader<NetWorkLoader.OperationWrapper> loader) {
         mNetWorkLoader = null;
     }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (isChangingConfigurations()){
-            mNetWorkLoader.getResult().getRepos().get(0).setName("Proof of Concept");
-        }
-
-    }
 }
